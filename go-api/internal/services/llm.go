@@ -21,6 +21,32 @@ type DiagnosePlan struct {
 	WhenToCallPro     []string            `json:"when_to_call_pro"`
 }
 
+type DiagnoseRequest struct {
+	PoolID   string           `json:"poolId"`
+	Symptoms string           `json:"symptoms"`
+	Context  *DiagnoseContext `json:"context,omitempty"`
+}
+
+type DiagnoseContext struct {
+	PoolVolumeGallons *float64           `json:"poolVolumeGallons,omitempty"`
+	SurfaceType       string             `json:"surfaceType,omitempty"`
+	SanitizerType     string             `json:"sanitizerType,omitempty"`
+	IsSalt            *bool              `json:"isSalt,omitempty"`
+	LatestTest        *DiagnoseWaterTest `json:"latestTest,omitempty"`
+}
+
+type DiagnoseWaterTest struct {
+	TestedAt string   `json:"testedAt,omitempty"`
+	FC       *float64 `json:"fc,omitempty"`
+	CC       *float64 `json:"cc,omitempty"`
+	PH       *float64 `json:"ph,omitempty"`
+	TA       *float64 `json:"ta,omitempty"`
+	CH       *float64 `json:"ch,omitempty"`
+	CYA      *float64 `json:"cya,omitempty"`
+	Salt     *float64 `json:"salt,omitempty"`
+	TempF    *float64 `json:"tempF,omitempty"`
+}
+
 type openAIChatCompletionRequest struct {
 	Model          string               `json:"model"`
 	Temperature    float64              `json:"temperature"`
@@ -60,24 +86,141 @@ Never provide aggressive dosing. Prefer add half, circulate, retest.
 Always include safety notes and when to call a pro.`
 
 func BuildFallbackPlan(symptoms string) DiagnosePlan {
-	c := "Medium"
-	if symptoms == "" {
-		c = "Low"
+	return BuildFallbackPlanWithContext(symptoms, nil)
+}
+
+func BuildFallbackPlanWithContext(symptoms string, context *DiagnoseContext) DiagnosePlan {
+	confidence := "Low"
+	diagnosis := "Likely sanitizer imbalance or filtration issue."
+	steps := []string{
+		"Check and clean filter",
+		"Raise free chlorine conservatively",
+		"Brush pool walls and circulate",
 	}
+	chemicalAddition := map[string]string{
+		"chemical":     "liquid_chlorine_10pct",
+		"amount":       "64",
+		"unit":         "oz",
+		"instructions": "Add half now, retest in 4 hours.",
+	}
+	retestHours := 4
+
+	if strings.TrimSpace(symptoms) != "" {
+		confidence = "Medium"
+	}
+
+	if context != nil && context.LatestTest != nil {
+		if context.LatestTest.FC != nil && *context.LatestTest.FC < 2 {
+			diagnosis = "Likely low sanitizer with early algae/organics load."
+			steps = []string{
+				"Clean and backwash/clean filter",
+				"Add liquid chlorine conservatively in split doses",
+				"Brush walls/floor and run circulation continuously",
+			}
+			confidence = "Medium"
+		}
+		if context.LatestTest.PH != nil && *context.LatestTest.PH > 7.8 {
+			steps = append([]string{"Lower pH gradually before additional oxidizer additions if needed"}, steps...)
+		}
+		if context.LatestTest.CC != nil && *context.LatestTest.CC >= 0.5 {
+			steps = append(steps, "Treat combined chlorine with conservative oxidation and retest")
+		}
+	}
+
+	if context != nil && context.PoolVolumeGallons != nil && *context.PoolVolumeGallons > 25000 {
+		chemicalAddition["amount"] = "96"
+	} else if context != nil && context.PoolVolumeGallons != nil && *context.PoolVolumeGallons < 10000 {
+		chemicalAddition["amount"] = "40"
+	}
+
 	return DiagnosePlan{
-		Diagnosis:         "Likely sanitizer imbalance or filtration issue.",
-		Confidence:        c,
-		Steps:             []string{"Check and clean filter", "Raise free chlorine conservatively", "Brush pool walls and circulate"},
-		ChemicalAdditions: []map[string]string{{"chemical": "liquid_chlorine_10pct", "amount": "64", "unit": "oz", "instructions": "Add half now, retest in 4 hours."}},
+		Diagnosis:         diagnosis,
+		Confidence:        confidence,
+		Steps:             steps,
+		ChemicalAdditions: []map[string]string{chemicalAddition},
 		SafetyNotes:       []string{"Never mix chemicals directly.", "Wear gloves and eye protection.", "Always retest before additional chemical additions."},
-		RetestInHours:     4,
+		RetestInHours:     retestHours,
 		WhenToCallPro:     []string{"If strong chlorine odor persists with high CC", "If water remains cloudy after 24-48h", "If pump/filter has abnormal pressure or electrical issues"},
 	}
 }
 
 func HasOpenAIKey() bool { return os.Getenv("OPENAI_API_KEY") != "" }
 
-func GenerateDiagnosePlan(symptoms string) (DiagnosePlan, error) {
+func ValidateDiagnoseRequest(req DiagnoseRequest) error {
+	if strings.TrimSpace(req.PoolID) == "" {
+		return fmt.Errorf("poolId is required")
+	}
+	hasSymptoms := strings.TrimSpace(req.Symptoms) != ""
+	hasReadings := req.Context != nil && req.Context.LatestTest != nil
+	if !hasSymptoms && !hasReadings {
+		return fmt.Errorf("provide symptoms or latestTest readings")
+	}
+	return nil
+}
+
+func buildDiagnoseUserPrompt(symptoms string, context *DiagnoseContext) string {
+	lines := []string{
+		"Generate a conservative pool treatment plan for the next 24 hours.",
+		fmt.Sprintf("Symptoms: %s", nonEmptyOrDefault(strings.TrimSpace(symptoms), "none provided")),
+	}
+
+	if context != nil {
+		lines = append(lines, "Pool profile:")
+		if context.PoolVolumeGallons != nil {
+			lines = append(lines, fmt.Sprintf("- volume_gallons: %.0f", *context.PoolVolumeGallons))
+		}
+		if strings.TrimSpace(context.SurfaceType) != "" {
+			lines = append(lines, fmt.Sprintf("- surface_type: %s", strings.TrimSpace(context.SurfaceType)))
+		}
+		if strings.TrimSpace(context.SanitizerType) != "" {
+			lines = append(lines, fmt.Sprintf("- sanitizer_type: %s", strings.TrimSpace(context.SanitizerType)))
+		}
+		if context.IsSalt != nil {
+			lines = append(lines, fmt.Sprintf("- is_salt_pool: %t", *context.IsSalt))
+		}
+		if context.LatestTest != nil {
+			lines = append(lines, "Latest water test:")
+			if strings.TrimSpace(context.LatestTest.TestedAt) != "" {
+				lines = append(lines, fmt.Sprintf("- tested_at: %s", strings.TrimSpace(context.LatestTest.TestedAt)))
+			}
+			if context.LatestTest.FC != nil {
+				lines = append(lines, fmt.Sprintf("- fc: %.2f", *context.LatestTest.FC))
+			}
+			if context.LatestTest.CC != nil {
+				lines = append(lines, fmt.Sprintf("- cc: %.2f", *context.LatestTest.CC))
+			}
+			if context.LatestTest.PH != nil {
+				lines = append(lines, fmt.Sprintf("- ph: %.2f", *context.LatestTest.PH))
+			}
+			if context.LatestTest.TA != nil {
+				lines = append(lines, fmt.Sprintf("- ta: %.2f", *context.LatestTest.TA))
+			}
+			if context.LatestTest.CH != nil {
+				lines = append(lines, fmt.Sprintf("- ch: %.2f", *context.LatestTest.CH))
+			}
+			if context.LatestTest.CYA != nil {
+				lines = append(lines, fmt.Sprintf("- cya: %.2f", *context.LatestTest.CYA))
+			}
+			if context.LatestTest.Salt != nil {
+				lines = append(lines, fmt.Sprintf("- salt: %.2f", *context.LatestTest.Salt))
+			}
+			if context.LatestTest.TempF != nil {
+				lines = append(lines, fmt.Sprintf("- temp_f: %.2f", *context.LatestTest.TempF))
+			}
+		}
+	}
+
+	return strings.Join(lines, "\n")
+}
+
+func nonEmptyOrDefault(value string, fallback string) string {
+	if value != "" {
+		return value
+	}
+	return fallback
+}
+
+func GenerateDiagnosePlan(symptoms string, context *DiagnoseContext) (DiagnosePlan, error) {
 	apiKey := os.Getenv("OPENAI_API_KEY")
 	if apiKey == "" {
 		return DiagnosePlan{}, fmt.Errorf("OPENAI_API_KEY missing")
@@ -93,7 +236,7 @@ func GenerateDiagnosePlan(symptoms string) (DiagnosePlan, error) {
 		baseURL = "https://api.openai.com/v1"
 	}
 
-	userPrompt := fmt.Sprintf("Symptoms: %s\nGenerate a conservative plan for the next 24 hours.", strings.TrimSpace(symptoms))
+	userPrompt := buildDiagnoseUserPrompt(symptoms, context)
 
 	payload := openAIChatCompletionRequest{
 		Model:       model,

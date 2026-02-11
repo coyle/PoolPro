@@ -21,19 +21,23 @@ func Calculator(w http.ResponseWriter, r *http.Request) {
 }
 
 func Diagnose(w http.ResponseWriter, r *http.Request) {
-	var body struct {
-		PoolID   string `json:"poolId"`
-		Symptoms string `json:"symptoms"`
-	}
-	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+	var body services.DiagnoseRequest
+	decoder := json.NewDecoder(r.Body)
+	decoder.DisallowUnknownFields()
+	if err := decoder.Decode(&body); err != nil {
 		http.Error(w, "invalid JSON body", http.StatusBadRequest)
 		return
 	}
-	plan := services.BuildFallbackPlan(body.Symptoms)
+	if err := services.ValidateDiagnoseRequest(body); err != nil {
+		http.Error(w, err.Error(), http.StatusBadRequest)
+		return
+	}
+
+	plan := services.BuildFallbackPlanWithContext(body.Symptoms, body.Context)
 	source := "fallback"
 	var warning string
 	if services.HasOpenAIKey() {
-		if llmPlan, err := services.GenerateDiagnosePlan(body.Symptoms); err == nil {
+		if llmPlan, err := services.GenerateDiagnosePlan(body.Symptoms, body.Context); err == nil {
 			plan = llmPlan
 			source = "llm"
 		} else {

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
-	"os"
 	"strings"
 	"testing"
 )
@@ -60,7 +59,7 @@ func TestGenerateDiagnosePlanSuccess(t *testing.T) {
 	t.Setenv("OPENAI_BASE_URL", server.URL)
 	t.Setenv("OPENAI_MODEL", "gpt-4o-mini")
 
-	plan, err := GenerateDiagnosePlan("Cloudy water and chlorine smell")
+	plan, err := GenerateDiagnosePlan("Cloudy water and chlorine smell", nil)
 	if err != nil {
 		t.Fatalf("expected success, got error: %v", err)
 	}
@@ -89,7 +88,7 @@ func TestGenerateDiagnosePlanInvalidModelOutput(t *testing.T) {
 	t.Setenv("OPENAI_API_KEY", "test-key")
 	t.Setenv("OPENAI_BASE_URL", server.URL)
 
-	_, err := GenerateDiagnosePlan("Cloudy water")
+	_, err := GenerateDiagnosePlan("Cloudy water", nil)
 	if err == nil {
 		t.Fatalf("expected validation error")
 	}
@@ -99,9 +98,36 @@ func TestGenerateDiagnosePlanInvalidModelOutput(t *testing.T) {
 }
 
 func TestGenerateDiagnosePlanMissingKey(t *testing.T) {
-	_ = os.Unsetenv("OPENAI_API_KEY")
-	_, err := GenerateDiagnosePlan("Cloudy water")
+	t.Setenv("OPENAI_API_KEY", "")
+	_, err := GenerateDiagnosePlan("Cloudy water", nil)
 	if err == nil {
 		t.Fatalf("expected error for missing key")
+	}
+}
+
+func TestValidateDiagnoseRequestRequiresSignal(t *testing.T) {
+	req := DiagnoseRequest{PoolID: "pool_1"}
+	if err := ValidateDiagnoseRequest(req); err == nil {
+		t.Fatalf("expected request validation error")
+	}
+}
+
+func TestBuildFallbackPlanWithContextUsesReadings(t *testing.T) {
+	fc := 1.0
+	ph := 7.9
+	volume := 30000.0
+	plan := BuildFallbackPlanWithContext("Cloudy water", &DiagnoseContext{
+		PoolVolumeGallons: &volume,
+		LatestTest: &DiagnoseWaterTest{
+			FC: &fc,
+			PH: &ph,
+		},
+	})
+
+	if plan.Confidence != "Medium" {
+		t.Fatalf("expected Medium confidence, got %s", plan.Confidence)
+	}
+	if plan.ChemicalAdditions[0]["amount"] != "96" {
+		t.Fatalf("expected chlorine amount 96 oz for larger pool, got %s", plan.ChemicalAdditions[0]["amount"])
 	}
 }
