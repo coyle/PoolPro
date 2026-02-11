@@ -324,14 +324,21 @@ func ValidateDiagnosePlan(plan DiagnosePlan) error {
 		return fmt.Errorf("steps must include at least one item")
 	}
 	for _, step := range plan.Steps {
-		if strings.TrimSpace(step) == "" {
+		trimmed := strings.TrimSpace(step)
+		if trimmed == "" {
 			return fmt.Errorf("steps cannot contain empty values")
+		}
+		if hasUnsafeDirective(trimmed) {
+			return fmt.Errorf("unsafe instruction detected in steps")
 		}
 	}
 	for _, addition := range plan.ChemicalAdditions {
 		if strings.TrimSpace(addition["chemical"]) == "" || strings.TrimSpace(addition["amount"]) == "" ||
 			strings.TrimSpace(addition["unit"]) == "" || strings.TrimSpace(addition["instructions"]) == "" {
 			return fmt.Errorf("chemical additions must include chemical, amount, unit, and instructions")
+		}
+		if hasUnsafeDirective(addition["instructions"]) {
+			return fmt.Errorf("unsafe instruction detected in chemical additions")
 		}
 	}
 	if len(plan.SafetyNotes) == 0 {
@@ -372,6 +379,13 @@ func extractJSONObject(s string) (string, error) {
 		return "", fmt.Errorf("model did not return a JSON object")
 	}
 	return s[start : end+1], nil
+}
+
+func hasUnsafeDirective(s string) bool {
+	normalized := strings.ToLower(s)
+	return strings.Contains(normalized, "mix chemicals") ||
+		(strings.Contains(normalized, "chlorine") && strings.Contains(normalized, "acid") && strings.Contains(normalized, "together")) ||
+		strings.Contains(normalized, "skip retest")
 }
 
 func diagnosePlanJSONSchema() map[string]any {

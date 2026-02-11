@@ -46,13 +46,16 @@ See `.env.example`.
 
 ## API Notes
 ### Next.js API routes
+- `GET /api/auth/csrf`
 - `POST /api/auth/register`
 - `POST /api/auth/login`
 - `GET /api/auth/me`
 - `POST /api/auth/logout`
 - `GET|POST /api/customers`
 - `GET|POST /api/customers/:customerId/pools`
+- `GET /api/pools/:poolId`
 - `GET|POST /api/pools/:poolId/water-tests`
+- `POST /api/pools/:poolId/diagnose`
 - `GET /api/pools/:poolId/timeline`
 - `POST /api/treatment-plans/:planId/repeat`
 
@@ -66,6 +69,11 @@ See `.env.example`.
 npm run test
 cd go-api && go test ./...
 ```
+
+## Security defaults
+- Session cookie has TTL and secure flag support (`AUTH_SESSION_TTL_SECONDS`, `AUTH_COOKIE_SECURE`).
+- CSRF protection is enabled for state-changing Next.js API routes (origin + token checks).
+- Login/register include in-memory rate limiting by client IP.
 
 ## Deployment notes
 - Deploy Next.js app (Vercel or similar)

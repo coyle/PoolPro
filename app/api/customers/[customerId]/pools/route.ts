@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { notFound, requireSession, unauthorized } from '@/lib/http';
 import { prisma } from '@/lib/prisma';
+import { requireCsrf } from '@/lib/security';
 import { parseJsonBody, parseRouteParams } from '@/lib/validation';
 
 const poolCreateSchema = z
@@ -37,6 +38,8 @@ export async function GET(_: NextRequest, { params }: { params: { customerId: st
 export async function POST(req: NextRequest, { params }: { params: { customerId: string } }) {
   const session = requireSession();
   if (!session) return unauthorized();
+  const csrfError = requireCsrf(req);
+  if (csrfError) return csrfError;
   const parsedParams = parseRouteParams(params, customerParamsSchema);
   if (!parsedParams.success) return parsedParams.response;
   const { customerId } = parsedParams.data;

@@ -1,8 +1,9 @@
-import { NextResponse } from 'next/server';
+import { NextRequest, NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
 import { z } from 'zod';
 import { notFound, requireSession, unauthorized } from '@/lib/http';
 import { prisma } from '@/lib/prisma';
+import { requireCsrf } from '@/lib/security';
 import { parseRouteParams } from '@/lib/validation';
 
 const planParamsSchema = z
@@ -15,9 +16,11 @@ function toInputJsonValue(value: Prisma.JsonValue): Prisma.InputJsonValue {
   return value === null ? (Prisma.JsonNull as unknown as Prisma.InputJsonValue) : (value as Prisma.InputJsonValue);
 }
 
-export async function POST(_: Request, { params }: { params: { planId: string } }) {
+export async function POST(req: NextRequest, { params }: { params: { planId: string } }) {
   const session = requireSession();
   if (!session) return unauthorized();
+  const csrfError = requireCsrf(req);
+  if (csrfError) return csrfError;
   const parsedParams = parseRouteParams(params, planParamsSchema);
   if (!parsedParams.success) return parsedParams.response;
   const { planId } = parsedParams.data;

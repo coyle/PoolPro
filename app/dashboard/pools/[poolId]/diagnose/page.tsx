@@ -1,7 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
-import { apiFetch } from '@/lib/api';
+import { csrfFetch } from '@/lib/csrf-client';
 
 type PoolContext = {
   volumeGallons?: number;
@@ -79,18 +79,22 @@ export default function DiagnosePage({ params }: { params: { poolId: string } })
   const submit = async () => {
     try {
       setError('');
-      const data = await apiFetch('/diagnose', {
+      const res = await csrfFetch(`/api/pools/${params.poolId}/diagnose`, {
         method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
-          poolId: params.poolId,
           symptoms,
           context: {
-            ...(poolContext || {}),
+            poolVolumeGallons: poolContext?.volumeGallons,
+            surfaceType: poolContext?.surfaceType,
+            sanitizerType: poolContext?.sanitizerType,
+            isSalt: poolContext?.isSalt,
             latestTest: latestTest || undefined,
           },
         }),
       });
-      setResult(data);
+      if (!res.ok) throw new Error((await res.json()).error || 'Diagnose failed');
+      setResult(await res.json());
     } catch (e: any) {
       setError(e.message);
     }
@@ -116,8 +120,37 @@ export default function DiagnosePage({ params }: { params: { poolId: string } })
           <p><b>Confidence:</b> {result.plan?.confidence}</p>
           <p><b>Source:</b> {result.source || 'fallback'}</p>
           {result.warning && <p className="text-amber-700"><b>Note:</b> {result.warning}</p>}
+          {result.safetyAdjustments?.length > 0 && (
+            <div>
+              <p><b>Safety Adjustments:</b></p>
+              <ul className="list-disc pl-5">
+                {result.safetyAdjustments.map((w: string, i: number) => <li key={i}>{w}</li>)}
+              </ul>
+            </div>
+          )}
           <p><b>Retest:</b> {result.plan?.retest_in_hours} hours</p>
-          <ul className="list-disc pl-5">{result.plan?.steps?.map((s: string, i: number)=><li key={i}>{s}</li>)}</ul>
+          <div>
+            <p><b>Steps</b></p>
+            <ul className="list-disc pl-5">{result.plan?.steps?.map((s: string, i: number)=><li key={i}>{s}</li>)}</ul>
+          </div>
+          <div>
+            <p><b>Chemical Additions</b></p>
+            <ul className="list-disc pl-5">
+              {result.plan?.chemical_additions?.map((c: any, i: number) => (
+                <li key={i}>
+                  {c.chemical}: {c.amount} {c.unit} - {c.instructions}
+                </li>
+              ))}
+            </ul>
+          </div>
+          <div>
+            <p><b>Safety Notes</b></p>
+            <ul className="list-disc pl-5">{result.plan?.safety_notes?.map((s: string, i: number)=><li key={i}>{s}</li>)}</ul>
+          </div>
+          <div>
+            <p><b>When To Call A Pro</b></p>
+            <ul className="list-disc pl-5">{result.plan?.when_to_call_pro?.map((s: string, i: number)=><li key={i}>{s}</li>)}</ul>
+          </div>
         </div>
       )}
     </div>

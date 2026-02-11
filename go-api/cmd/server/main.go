@@ -8,7 +8,14 @@ import (
 	"poolpro/go-api/internal/handlers"
 )
 
+func validateEnv() {
+	if os.Getenv("OPENAI_API_KEY") == "" {
+		log.Println("warning: OPENAI_API_KEY is not set; diagnose endpoint will use fallback mode")
+	}
+}
+
 func main() {
+	validateEnv()
 	mux := http.NewServeMux()
 	mux.HandleFunc("/api/v1/healthz", handlers.Health)
 	mux.HandleFunc("/api/v1/calculator/dose", handlers.Calculator)

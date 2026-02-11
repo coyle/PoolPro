@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { csrfFetch } from '@/lib/csrf-client';
 
 export default function LoginPage() {
   const [email, setEmail] = useState('demo@poolpro.local');
@@ -11,7 +12,11 @@ export default function LoginPage() {
 
   const submit = async () => {
     setError('');
-    const res = await fetch('/api/auth/login', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ email, password }) });
+    const res = await csrfFetch('/api/auth/login', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email, password }),
+    });
     if (!res.ok) return setError((await res.json()).error || 'Login failed');
     router.push('/dashboard');
   };

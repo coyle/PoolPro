@@ -1,6 +1,7 @@
 'use client';
 
 import { useEffect, useState } from 'react';
+import { csrfFetch } from '@/lib/csrf-client';
 
 type TimelineItem = { type: 'water_test' | 'treatment_plan'; at: string; data: any };
 
@@ -23,9 +24,16 @@ export default function HistoryPage({ params }: { params: { poolId: string } }) 
   }, [params.poolId]);
 
   const repeatPlan = async (id: string) => {
-    const res = await fetch(`/api/treatment-plans/${id}/repeat`, { method: 'POST' });
+    if (!confirm('Repeat this plan and save it as a new treatment plan?')) return;
+    const res = await csrfFetch(`/api/treatment-plans/${id}/repeat`, { method: 'POST' });
     if (!res.ok) return setError((await res.json()).error || 'Repeat failed');
     location.reload();
+  };
+
+  const delta = (latest?: number | null, previous?: number | null) => {
+    if (latest === undefined || latest === null || previous === undefined || previous === null) return '-';
+    const d = latest - previous;
+    return `${d > 0 ? '+' : ''}${d.toFixed(2)}`;
   };
 
   return (
@@ -34,9 +42,10 @@ export default function HistoryPage({ params }: { params: { poolId: string } }) 
       {compare && (
         <div className="card text-sm">
           <h2 className="font-semibold">Compare last 2 tests</h2>
-          <p>FC: {compare.previous.fc ?? '-'} → {compare.latest.fc ?? '-'}</p>
-          <p>pH: {compare.previous.ph ?? '-'} → {compare.latest.ph ?? '-'}</p>
-          <p>TA: {compare.previous.ta ?? '-'} → {compare.latest.ta ?? '-'}</p>
+          <p>FC: {compare.previous.fc ?? '-'} → {compare.latest.fc ?? '-'} ({delta(compare.latest.fc, compare.previous.fc)})</p>
+          <p>pH: {compare.previous.ph ?? '-'} → {compare.latest.ph ?? '-'} ({delta(compare.latest.ph, compare.previous.ph)})</p>
+          <p>TA: {compare.previous.ta ?? '-'} → {compare.latest.ta ?? '-'} ({delta(compare.latest.ta, compare.previous.ta)})</p>
+          <p>CYA: {compare.previous.cya ?? '-'} → {compare.latest.cya ?? '-'} ({delta(compare.latest.cya, compare.previous.cya)})</p>
         </div>
       )}
       {error && <div className="card text-sm text-red-600">{error}</div>}

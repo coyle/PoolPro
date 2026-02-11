@@ -2,6 +2,7 @@
 
 import { useState } from 'react';
 import { useRouter } from 'next/navigation';
+import { csrfFetch } from '@/lib/csrf-client';
 
 export default function RegisterPage() {
   const [name, setName] = useState('');
@@ -12,7 +13,11 @@ export default function RegisterPage() {
 
   const submit = async () => {
     setError('');
-    const res = await fetch('/api/auth/register', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name, email, password }) });
+    const res = await csrfFetch('/api/auth/register', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ name, email, password }),
+    });
     if (!res.ok) return setError((await res.json()).error || 'Register failed');
     router.push('/dashboard');
   };

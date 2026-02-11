@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { notFound, requireSession, unauthorized } from '@/lib/http';
 import { prisma } from '@/lib/prisma';
+import { requireCsrf } from '@/lib/security';
 import { parseJsonBody, parseQuery, parseRouteParams } from '@/lib/validation';
 
 const optionalNumber = (min: number, max: number) =>
@@ -67,6 +68,8 @@ export async function GET(req: NextRequest, { params }: { params: { poolId: stri
 export async function POST(req: NextRequest, { params }: { params: { poolId: string } }) {
   const session = requireSession();
   if (!session) return unauthorized();
+  const csrfError = requireCsrf(req);
+  if (csrfError) return csrfError;
   const parsedParams = parseRouteParams(params, poolParamsSchema);
   if (!parsedParams.success) return parsedParams.response;
   const { poolId } = parsedParams.data;

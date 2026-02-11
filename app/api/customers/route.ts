@@ -2,6 +2,7 @@ import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { requireSession, unauthorized } from '@/lib/http';
 import { prisma } from '@/lib/prisma';
+import { requireCsrf } from '@/lib/security';
 import { parseJsonBody } from '@/lib/validation';
 
 const customerCreateSchema = z
@@ -22,6 +23,8 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = requireSession();
   if (!session) return unauthorized();
+  const csrfError = requireCsrf(req);
+  if (csrfError) return csrfError;
   const parsed = await parseJsonBody(req, customerCreateSchema);
   if (!parsed.success) return parsed.response;
   const { name, address, notes } = parsed.data;
