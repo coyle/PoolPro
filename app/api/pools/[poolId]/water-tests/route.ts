@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requireSession, unauthorized } from '@/lib/http';
+import { notFound, requireSession, unauthorized } from '@/lib/http';
 import { prisma } from '@/lib/prisma';
-import { parseJsonBody } from '@/lib/validation';
+import { parseJsonBody, parseQuery, parseRouteParams } from '@/lib/validation';
 
 const optionalNumber = (min: number, max: number) =>
   z.preprocess(
@@ -31,31 +31,55 @@ const waterTestCreateSchema = z
   })
   .strict();
 
+const poolParamsSchema = z
+  .object({
+    poolId: z.string().cuid(),
+  })
+  .strict();
+
+const waterTestsQuerySchema = z
+  .object({
+    limit: z.coerce.number().int().min(1).max(200).optional(),
+  })
+  .strict();
+
 async function canAccessPool(userId: string, poolId: string) {
   return prisma.pool.findFirst({ where: { id: poolId, customer: { userId } } });
 }
 
-export async function GET(_: NextRequest, { params }: { params: { poolId: string } }) {
+export async function GET(req: NextRequest, { params }: { params: { poolId: string } }) {
   const session = requireSession();
   if (!session) return unauthorized();
-  const pool = await canAccessPool(session.userId, params.poolId);
-  if (!pool) return NextResponse.json({ error: 'pool not found' }, { status: 404 });
-  const tests = await prisma.waterTest.findMany({ where: { poolId: params.poolId }, orderBy: { testedAt: 'desc' }, take: 50 });
+  const parsedParams = parseRouteParams(params, poolParamsSchema);
+  if (!parsedParams.success) return parsedParams.response;
+  const { poolId } = parsedParams.data;
+
+  const parsedQuery = parseQuery(req, waterTestsQuerySchema);
+  if (!parsedQuery.success) return parsedQuery.response;
+  const limit = parsedQuery.data.limit ?? 50;
+
+  const pool = await canAccessPool(session.userId, poolId);
+  if (!pool) return notFound('pool not found', 'pool_not_found');
+  const tests = await prisma.waterTest.findMany({ where: { poolId }, orderBy: { testedAt: 'desc' }, take: limit });
   return NextResponse.json({ tests });
 }
 
 export async function POST(req: NextRequest, { params }: { params: { poolId: string } }) {
   const session = requireSession();
   if (!session) return unauthorized();
-  const pool = await canAccessPool(session.userId, params.poolId);
-  if (!pool) return NextResponse.json({ error: 'pool not found' }, { status: 404 });
+  const parsedParams = parseRouteParams(params, poolParamsSchema);
+  if (!parsedParams.success) return parsedParams.response;
+  const { poolId } = parsedParams.data;
+
+  const pool = await canAccessPool(session.userId, poolId);
+  if (!pool) return notFound('pool not found', 'pool_not_found');
   const parsed = await parseJsonBody(req, waterTestCreateSchema);
   if (!parsed.success) return parsed.response;
   const b = parsed.data;
 
   const test = await prisma.waterTest.create({
     data: {
-      poolId: params.poolId,
+      poolId,
       testedAt: b.testedAt ? new Date(b.testedAt) : new Date(),
       fc: b.fc,
       cc: b.cc,

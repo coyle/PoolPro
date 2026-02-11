@@ -1,5 +1,6 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
+import { apiError } from '@/lib/http';
 import { setSessionCookie, signSession, verifyPassword } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
 import { parseJsonBody } from '@/lib/validation';
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
 
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !verifyPassword(password, user.passwordHash)) {
-    return NextResponse.json({ error: 'invalid credentials' }, { status: 401 });
+    return apiError(401, 'invalid credentials', 'invalid_credentials');
   }
   setSessionCookie(signSession({ userId: user.id, email: user.email }));
   return NextResponse.json({ user: { id: user.id, email: user.email, name: user.name } });

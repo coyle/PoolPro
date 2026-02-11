@@ -1,8 +1,8 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
-import { requireSession, unauthorized } from '@/lib/http';
+import { notFound, requireSession, unauthorized } from '@/lib/http';
 import { prisma } from '@/lib/prisma';
-import { parseJsonBody } from '@/lib/validation';
+import { parseJsonBody, parseRouteParams } from '@/lib/validation';
 
 const poolCreateSchema = z
   .object({
@@ -15,27 +15,41 @@ const poolCreateSchema = z
   })
   .strict();
 
+const customerParamsSchema = z
+  .object({
+    customerId: z.string().cuid(),
+  })
+  .strict();
+
 export async function GET(_: NextRequest, { params }: { params: { customerId: string } }) {
   const session = requireSession();
   if (!session) return unauthorized();
-  const customer = await prisma.customer.findFirst({ where: { id: params.customerId, userId: session.userId } });
-  if (!customer) return NextResponse.json({ error: 'customer not found' }, { status: 404 });
-  const pools = await prisma.pool.findMany({ where: { customerId: params.customerId }, orderBy: { createdAt: 'desc' } });
+  const parsedParams = parseRouteParams(params, customerParamsSchema);
+  if (!parsedParams.success) return parsedParams.response;
+  const { customerId } = parsedParams.data;
+
+  const customer = await prisma.customer.findFirst({ where: { id: customerId, userId: session.userId } });
+  if (!customer) return notFound('customer not found', 'customer_not_found');
+  const pools = await prisma.pool.findMany({ where: { customerId }, orderBy: { createdAt: 'desc' } });
   return NextResponse.json({ pools });
 }
 
 export async function POST(req: NextRequest, { params }: { params: { customerId: string } }) {
   const session = requireSession();
   if (!session) return unauthorized();
-  const customer = await prisma.customer.findFirst({ where: { id: params.customerId, userId: session.userId } });
-  if (!customer) return NextResponse.json({ error: 'customer not found' }, { status: 404 });
+  const parsedParams = parseRouteParams(params, customerParamsSchema);
+  if (!parsedParams.success) return parsedParams.response;
+  const { customerId } = parsedParams.data;
+
+  const customer = await prisma.customer.findFirst({ where: { id: customerId, userId: session.userId } });
+  if (!customer) return notFound('customer not found', 'customer_not_found');
   const parsed = await parseJsonBody(req, poolCreateSchema);
   if (!parsed.success) return parsed.response;
   const body = parsed.data;
 
   const pool = await prisma.pool.create({
     data: {
-      customerId: params.customerId,
+      customerId,
       name: body.name,
       volumeGallons: body.volumeGallons,
       surfaceType: body.surfaceType || 'plaster',

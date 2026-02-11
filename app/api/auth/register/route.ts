@@ -1,6 +1,7 @@
 import { NextRequest, NextResponse } from 'next/server';
 import { z } from 'zod';
 import { hashPassword, setSessionCookie, signSession } from '@/lib/auth';
+import { apiError } from '@/lib/http';
 import { prisma } from '@/lib/prisma';
 import { parseJsonBody } from '@/lib/validation';
 
@@ -18,7 +19,7 @@ export async function POST(req: NextRequest) {
   const { email, password, name } = parsed.data;
 
   const exists = await prisma.user.findUnique({ where: { email } });
-  if (exists) return NextResponse.json({ error: 'email already exists' }, { status: 409 });
+  if (exists) return apiError(409, 'email already exists', 'email_conflict');
 
   const user = await prisma.user.create({
     data: { email, name, passwordHash: hashPassword(password) },

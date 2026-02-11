@@ -1,7 +1,15 @@
 import { NextResponse } from 'next/server';
 import { Prisma } from '@prisma/client';
-import { requireSession, unauthorized } from '@/lib/http';
+import { z } from 'zod';
+import { notFound, requireSession, unauthorized } from '@/lib/http';
 import { prisma } from '@/lib/prisma';
+import { parseRouteParams } from '@/lib/validation';
+
+const planParamsSchema = z
+  .object({
+    planId: z.string().cuid(),
+  })
+  .strict();
 
 function toInputJsonValue(value: Prisma.JsonValue): Prisma.InputJsonValue {
   return value === null ? (Prisma.JsonNull as unknown as Prisma.InputJsonValue) : (value as Prisma.InputJsonValue);
@@ -10,8 +18,12 @@ function toInputJsonValue(value: Prisma.JsonValue): Prisma.InputJsonValue {
 export async function POST(_: Request, { params }: { params: { planId: string } }) {
   const session = requireSession();
   if (!session) return unauthorized();
-  const plan = await prisma.treatmentPlan.findFirst({ where: { id: params.planId, pool: { customer: { userId: session.userId } } } });
-  if (!plan) return NextResponse.json({ error: 'plan not found' }, { status: 404 });
+  const parsedParams = parseRouteParams(params, planParamsSchema);
+  if (!parsedParams.success) return parsedParams.response;
+  const { planId } = parsedParams.data;
+
+  const plan = await prisma.treatmentPlan.findFirst({ where: { id: planId, pool: { customer: { userId: session.userId } } } });
+  if (!plan) return notFound('plan not found', 'plan_not_found');
 
   const repeated = await prisma.treatmentPlan.create({
     data: {
