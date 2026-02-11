@@ -25,7 +25,24 @@ func Diagnose(w http.ResponseWriter, r *http.Request) {
 		PoolID   string `json:"poolId"`
 		Symptoms string `json:"symptoms"`
 	}
-	_ = json.NewDecoder(r.Body).Decode(&body)
+	if err := json.NewDecoder(r.Body).Decode(&body); err != nil {
+		http.Error(w, "invalid JSON body", http.StatusBadRequest)
+		return
+	}
 	plan := services.BuildFallbackPlan(body.Symptoms)
-	json.NewEncoder(w).Encode(map[string]any{"plan": plan})
+	source := "fallback"
+	var warning string
+	if services.HasOpenAIKey() {
+		if llmPlan, err := services.GenerateDiagnosePlan(body.Symptoms); err == nil {
+			plan = llmPlan
+			source = "llm"
+		} else {
+			warning = "LLM response unavailable or invalid; returned conservative fallback plan."
+		}
+	}
+	resp := map[string]any{"plan": plan, "source": source}
+	if warning != "" {
+		resp["warning"] = warning
+	}
+	json.NewEncoder(w).Encode(resp)
 }
