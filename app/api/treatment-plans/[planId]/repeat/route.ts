@@ -1,6 +1,11 @@
 import { NextResponse } from 'next/server';
+import { Prisma } from '@prisma/client';
 import { requireSession, unauthorized } from '@/lib/http';
 import { prisma } from '@/lib/prisma';
+
+function toInputJsonValue(value: Prisma.JsonValue): Prisma.InputJsonValue {
+  return value === null ? (Prisma.JsonNull as unknown as Prisma.InputJsonValue) : (value as Prisma.InputJsonValue);
+}
 
 export async function POST(_: Request, { params }: { params: { planId: string } }) {
   const session = requireSession();
@@ -15,11 +20,11 @@ export async function POST(_: Request, { params }: { params: { planId: string } 
       source: plan.source,
       diagnosis: plan.diagnosis,
       confidence: plan.confidence,
-      steps: plan.steps,
-      chemicalAdditions: plan.chemicalAdditions,
-      safetyNotes: plan.safetyNotes,
+      steps: toInputJsonValue(plan.steps),
+      chemicalAdditions: toInputJsonValue(plan.chemicalAdditions),
+      safetyNotes: toInputJsonValue(plan.safetyNotes),
       retestInHours: plan.retestInHours,
-      whenToCallPro: plan.whenToCallPro,
+      whenToCallPro: toInputJsonValue(plan.whenToCallPro),
       conversationSummary: `Repeated plan from ${plan.createdAt.toISOString()}`,
     },
   });

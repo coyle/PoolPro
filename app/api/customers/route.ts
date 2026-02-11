@@ -1,6 +1,16 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { requireSession, unauthorized } from '@/lib/http';
 import { prisma } from '@/lib/prisma';
+import { parseJsonBody } from '@/lib/validation';
+
+const customerCreateSchema = z
+  .object({
+    name: z.string().trim().min(1, 'name required').max(120),
+    address: z.string().trim().max(200).optional(),
+    notes: z.string().trim().max(1000).optional(),
+  })
+  .strict();
 
 export async function GET() {
   const session = requireSession();
@@ -12,8 +22,10 @@ export async function GET() {
 export async function POST(req: NextRequest) {
   const session = requireSession();
   if (!session) return unauthorized();
-  const { name, address, notes } = await req.json();
-  if (!name) return NextResponse.json({ error: 'name required' }, { status: 400 });
+  const parsed = await parseJsonBody(req, customerCreateSchema);
+  if (!parsed.success) return parsed.response;
+  const { name, address, notes } = parsed.data;
+
   const customer = await prisma.customer.create({ data: { userId: session.userId, name, address, notes } });
   return NextResponse.json({ customer });
 }

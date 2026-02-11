@@ -7,10 +7,30 @@ datasource db {
   url      = env("DATABASE_URL")
 }
 
-enum SurfaceType { plaster vinyl fiberglass other }
-enum SanitizerType { chlorine salt bromine other }
-enum PlanSource { calculator llm }
-enum Confidence { HIGH MEDIUM LOW }
+enum SurfaceType {
+  plaster
+  vinyl
+  fiberglass
+  other
+}
+
+enum SanitizerType {
+  chlorine
+  salt
+  bromine
+  other
+}
+
+enum PlanSource {
+  calculator
+  llm
+}
+
+enum Confidence {
+  HIGH
+  MEDIUM
+  LOW
+}
 
 model User {
   id           String     @id @default(cuid())

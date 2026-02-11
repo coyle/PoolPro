@@ -1,9 +1,21 @@
 import { NextRequest, NextResponse } from 'next/server';
+import { z } from 'zod';
 import { setSessionCookie, signSession, verifyPassword } from '@/lib/auth';
 import { prisma } from '@/lib/prisma';
+import { parseJsonBody } from '@/lib/validation';
+
+const loginSchema = z
+  .object({
+    email: z.string().trim().email().transform((value) => value.toLowerCase()),
+    password: z.string().min(1, 'password required'),
+  })
+  .strict();
 
 export async function POST(req: NextRequest) {
-  const { email, password } = await req.json();
+  const parsed = await parseJsonBody(req, loginSchema);
+  if (!parsed.success) return parsed.response;
+  const { email, password } = parsed.data;
+
   const user = await prisma.user.findUnique({ where: { email } });
   if (!user || !verifyPassword(password, user.passwordHash)) {
     return NextResponse.json({ error: 'invalid credentials' }, { status: 401 });
