@@ -1,12 +1,7 @@
 import { calculateDosing } from '../chemistry/dosing';
 import type { LlmPlan } from './schema';
 
-const UNSAFE_PATTERNS = [
-  /mix .*chemicals/i,
-  /combine .*chlorine .*acid/i,
-  /no retest/i,
-  /skip retest/i,
-];
+const UNSAFE_PATTERNS = [/no retest/i, /skip retest/i];
 
 type DiagnoseContext = {
   poolVolumeGallons?: number;
@@ -28,7 +23,18 @@ function parseNumericAmount(value: string) {
 export function enforceDiagnoseSafety(plan: LlmPlan, context?: DiagnoseContext) {
   const warnings: string[] = [];
 
-  const checkUnsafe = (text: string) => UNSAFE_PATTERNS.some((pattern) => pattern.test(text));
+  const checkUnsafe = (text: string) => {
+    const normalized = text.toLowerCase();
+    const hasNegatedMixInstruction =
+      (normalized.includes('mix') && normalized.includes('chemical') && (normalized.includes('never mix') || normalized.includes('do not mix')));
+    const hasNegatedAcidChlorineWarning =
+      normalized.includes('chlorine') && normalized.includes('acid') && (normalized.includes('never') || normalized.includes('do not'));
+    const explicitlyUnsafeMix =
+      normalized.includes('mix') && normalized.includes('chemical') && !hasNegatedMixInstruction;
+    const explicitlyUnsafeAcidChlorine =
+      normalized.includes('chlorine') && normalized.includes('acid') && normalized.includes('together') && !hasNegatedAcidChlorineWarning;
+    return explicitlyUnsafeMix || explicitlyUnsafeAcidChlorine || UNSAFE_PATTERNS.some((pattern) => pattern.test(text));
+  };
   const combinedText = [
     plan.diagnosis,
     ...plan.steps,
