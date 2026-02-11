@@ -1,0 +1,95 @@
+generator client {
+  provider = "prisma-client-js"
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+enum SurfaceType { plaster vinyl fiberglass other }
+enum SanitizerType { chlorine salt bromine other }
+enum PlanSource { calculator llm }
+enum Confidence { HIGH MEDIUM LOW }
+
+model User {
+  id           String     @id @default(cuid())
+  email        String     @unique
+  passwordHash String
+  name         String?
+  createdAt    DateTime   @default(now())
+  updatedAt    DateTime   @updatedAt
+  customers    Customer[]
+}
+
+model Customer {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  address   String?
+  notes     String?
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  pools     Pool[]
+
+  @@index([userId])
+}
+
+model Pool {
+  id             String        @id @default(cuid())
+  customerId     String
+  name           String
+  volumeGallons  Int
+  surfaceType    SurfaceType
+  sanitizerType  SanitizerType
+  isSalt         Boolean       @default(false)
+  equipmentNotes String?
+  createdAt      DateTime      @default(now())
+  updatedAt      DateTime      @updatedAt
+  customer       Customer      @relation(fields: [customerId], references: [id], onDelete: Cascade)
+  waterTests     WaterTest[]
+  treatmentPlans TreatmentPlan[]
+
+  @@index([customerId])
+}
+
+model WaterTest {
+  id        String   @id @default(cuid())
+  poolId     String
+  testedAt   DateTime
+  fc         Float?
+  cc         Float?
+  ph         Float?
+  ta         Float?
+  ch         Float?
+  cya        Float?
+  salt       Float?
+  tempF      Float?
+  symptoms   String?
+  createdAt  DateTime @default(now())
+  pool       Pool     @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  plans      TreatmentPlan[]
+
+  @@index([poolId, testedAt(sort: Desc)])
+}
+
+model TreatmentPlan {
+  id                 String      @id @default(cuid())
+  poolId              String
+  waterTestId         String?
+  source              PlanSource
+  diagnosis           String
+  confidence          Confidence
+  steps               Json
+  chemicalAdditions   Json
+  safetyNotes         Json
+  retestInHours       Int?
+  whenToCallPro       Json
+  conversationSummary String?
+  createdAt           DateTime   @default(now())
+  pool                Pool       @relation(fields: [poolId], references: [id], onDelete: Cascade)
+  waterTest           WaterTest? @relation(fields: [waterTestId], references: [id])
+
+  @@index([poolId, createdAt(sort: Desc)])
+}
