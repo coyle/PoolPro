@@ -72,3 +72,6 @@ cd go-api && go test ./...
 - Deploy Go API (Fly/Render)
 - Use managed Postgres and set `DATABASE_URL`
 - Set `NEXT_PUBLIC_API_BASE_URL` to Go API URL
+
+## Merge conflicts
+If you hit merge conflicts while integrating this branch, follow `docs/merge-conflict-resolution.md` for step-by-step conflict cleanup and validation.
