@@ -1,12 +1,21 @@
 # Pool Pro LLM (MVP)
 
-Mobile-first web app for pool diagnostics, dosing calculations, and customer/pool history.
+Pool Pro LLM is a mobile-first web app that helps pool owners diagnose pool problems and calculate conservative chemical dosing, while storing customer/pool history.
 
 ## Stack
-- Next.js App Router + TypeScript + Tailwind
-- Go API service
-- Postgres + Prisma
-- OpenAI integration hooks with structured PoolPro prompt
+- Frontend: Next.js App Router + TypeScript + Tailwind
+- Backend: Go API service (diagnose + dosing endpoints) and Next.js API routes (auth + persistence CRUD)
+- DB: Postgres + Prisma
+- LLM: OpenAI-ready prompt/schema with conservative guardrails
+
+## Features
+- Wizard-like flow: Customer → Pool → Test → Plan
+- Dosing calculator with conservative caps and confidence levels
+- Diagnose chat screen with safety-first guardrails
+- Timeline history with:
+  - compare last 2 tests
+  - repeat last plan
+- Simple password auth (register/login/me/logout)
 
 ## Setup
 1. Copy env file:
@@ -17,30 +26,52 @@ Mobile-first web app for pool diagnostics, dosing calculations, and customer/poo
    ```bash
    docker compose up -d
    ```
-3. Install deps and Prisma setup:
+3. Install dependencies + DB setup:
    ```bash
    npm install
    npx prisma generate
    npx prisma migrate dev --name init
    npm run prisma:seed
    ```
-4. Run app + API:
+4. Run the app and Go API in separate terminals:
    ```bash
    npm run dev
+   ```
+   ```bash
    go run ./go-api/cmd/server
    ```
 
 ## Environment Variables
-See `.env.example` for full list.
+See `.env.example`.
 
-## Test
+## API Notes
+### Next.js API routes
+- `POST /api/auth/register`
+- `POST /api/auth/login`
+- `GET /api/auth/me`
+- `POST /api/auth/logout`
+- `GET|POST /api/customers`
+- `GET|POST /api/customers/:customerId/pools`
+- `GET|POST /api/pools/:poolId/water-tests`
+- `GET /api/pools/:poolId/timeline`
+- `POST /api/treatment-plans/:planId/repeat`
+
+### Go API routes
+- `GET /api/v1/healthz`
+- `POST /api/v1/calculator/dose`
+- `POST /api/v1/diagnose`
+
+## Testing
 ```bash
 npm run test
-go test ./... -C go-api
+cd go-api && go test ./...
 ```
 
-## Deploy notes
-- Deploy Next.js on Vercel.
-- Deploy Go API on Fly/Render.
-- Use managed Postgres and set `DATABASE_URL`.
-- Set `NEXT_PUBLIC_API_BASE_URL` to deployed Go API URL.
+## Deployment notes
+- Deploy Next.js app (Vercel or similar)
+- Deploy Go API (Fly/Render)
+- Use managed Postgres and set `DATABASE_URL`
+- Set `NEXT_PUBLIC_API_BASE_URL` to Go API URL
+
+## Merge conflicts
+If you hit merge conflicts while integrating this branch, follow `docs/merge-conflict-resolution.md` for step-by-step conflict cleanup and validation.

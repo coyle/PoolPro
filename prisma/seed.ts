@@ -6,7 +6,7 @@ async function main() {
   const user = await prisma.user.upsert({
     where: { email: 'demo@poolpro.local' },
     update: {},
-    create: { email: 'demo@poolpro.local', passwordHash: 'demo-hash', name: 'Demo User' },
+    create: { email: 'demo@poolpro.local', passwordHash: 'demodemosalt:b6f358746282ba3f9a8e247a815eb3775c727b131ebf94a3a91ffd351474edb0', name: 'Demo User' },
   });
   const customer = await prisma.customer.create({ data: { userId: user.id, name: 'Jane Homeowner', notes: 'Prefers evening service' } });
   const pool = await prisma.pool.create({
